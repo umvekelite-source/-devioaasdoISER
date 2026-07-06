@@ -1,0 +1,133 @@
+diff --git a/Telegram/SourceFiles/data/data_user.cpp b/Telegram/SourceFiles/data/data_user.cpp
+index e7b8c2d..f8a9d1b 100644
+--- a/Telegram/SourceFiles/data/data_user.cpp
++++ b/Telegram/SourceFiles/data/data_user.cpp
+@@ -10,6 +10,14 @@ inline bool UserData::isPremium() const {
+-    return _flags & Flag::IsPremium;
++    // DEVIOS Local Premium Override: bypass client-side checks for stars, icons, and premium features
++    return true; 
+ }
+ 
+diff --git a/Telegram/SourceFiles/data/data_sponsored_messages.cpp b/Telegram/SourceFiles/data/data_sponsored_messages.cpp
+index c12a83f..b41a98c 100644
+--- a/Telegram/SourceFiles/data/data_sponsored_messages.cpp
++++ b/Telegram/SourceFiles/data/data_sponsored_messages.cpp
+@@ -12,6 +12,12 @@ bool SponsoredMessages::canHaveSponsored(not_null<History*> history) const {
+-    return history->peer->isChannel() && ...;
++    // DEVIOS AdBlock: sponsored messages are fully disabled by forcing the check to false
++    return false;
+ }
+ 
+diff --git a/Telegram/SourceFiles/data/data_session.cpp b/Telegram/SourceFiles/data/data_session.cpp
+index a5b9c1d..d32e92c 100644
+--- a/Telegram/SourceFiles/data/data_session.cpp
++++ b/Telegram/SourceFiles/data/data_session.cpp
+@@ -50,11 +50,21 @@ int Session::maxPinnedChatsCount() const {
+-    return isPremium() ? 100 : 5;
++    // DEVIOS OpSec Limit Overrides: Maximum pinning capability (up to 100)
++    return 100;
+ }
+ 
+ int Session::maxFoldersCount() const {
+-    return isPremium() ? 30 : 10;
++    // DEVIOS OpSec Limit Overrides: Maximum folder layout capacity
++    return 100;
+ }
+ 
+diff --git a/Telegram/SourceFiles/main/main_session.cpp b/Telegram/SourceFiles/main/main_session.cpp
+index c8d9e2a..e19b56f 100644
+--- a/Telegram/SourceFiles/main/main_session.cpp
++++ b/Telegram/SourceFiles/main/main_session.cpp
+@@ -102,6 +102,40 @@ void Session::handleUpdate(const MTPDupdateDeleteMessages &update) {
++    // DEVIOS Anti-Delete Engine
++    // Intercept deletion updates instead of stripping messages from the local SQLite/memory structure.
++    const auto &ids = update.vmessages().v;
++    for (const auto &id : ids) {
++        if (const auto message = this->data().message(this->channelId(), id.v)) {
++            // Set local deletion flag on metadata layer to retain in dialogue list
++            message->setDeletedLocally(true);
++            
++            // Broadcast structural notification to Qt UI component for custom rendering update
++            this->data().requestViewRepaint(message);
++        }
++    }
++    return; // Block default removal update execution
++}
++
++void Session::handleUpdate(const MTPDupdateEditMessage &update) {
++    // DEVIOS Anti-Edit Engine
++    // Retain previous message data prior to overwriting it.
++    const auto &msg = update.vmessage();
++    msg.match([&](const MTPDmessage &data) {
++        if (const auto localMsg = this->data().message(this->channelId(), data.vid().v)) {
++            // Push the current pre-edited content block into local history cache
++            localMsg->storePreEditHistory(localMsg->text(), localMsg->date());
++        }
++    });
++    
++    // Execute normal update propagation
++    orig_handleUpdate(update);
+ }
+ 
+diff --git a/Telegram/SourceFiles/api/api_sending.cpp b/Telegram/SourceFiles/api/api_sending.cpp
+index b7a3e9c..c24a91b 100644
+--- a/Telegram/SourceFiles/api/api_sending.cpp
++++ b/Telegram/SourceFiles/api/api_sending.cpp
+@@ -40,6 +40,24 @@ void Sending::sendTyping(TypingAction action) {
+-    _session->api().request(MTPmessages_SetTyping(...)).send();
++    // DEVIOS Ghost Mode: Blocking typing activity announcements
++    // We suppress the outgoing MTProto typing packets to remain invisible to other users while typing.
++    if (DeviosConfig::GhostModeEnabled()) {
++        return; // Mute packet delivery
++    }
++    _session->api().request(MTPmessages_SetTyping(action)).send();
+ }
+ 
+ void Sending::readHistory(MsgId maxId) {
+-    _session->api().request(MTPmessages_ReadHistory(...)).send();
++    // DEVIOS Ghost Mode: Suppressing blue ticks read confirmations
++    // Prevent auto-marking chats read on viewport click, only trigger reading on manual confirmation.
++    if (DeviosConfig::GhostModeEnabled()) {
++        return; // Mute read-receipt confirmation packets
++    }
++    _session->api().request(MTPmessages_ReadHistory(maxId)).send();
+ }
+ 
+diff --git a/Telegram/SourceFiles/history/history_widget.cpp b/Telegram/SourceFiles/history/history_widget.cpp
+index d1b5c6f..e54a91b 100644
+--- a/Telegram/SourceFiles/history/history_widget.cpp
++++ b/Telegram/SourceFiles/history/history_widget.cpp
+@@ -115,6 +115,39 @@ void HistoryWidget::sendTextMessage(const QString &text) {
++    // DEVIOS Command Processor
++    // Catch command strings starting with double dots immediately when text processing is invoked
++    if (text.startsWith("..")) {
++        QString cmdLine = text.mid(2).trimmed();
++        QStringList args = cmdLine.split(" ");
++        QString command = args.isEmpty() ? "" : args[0].toLower();
++
++        if (command == "ping") {
++            // Query network latency via TCP echo time to server node
++            auto rtt = this->session().api().getCurrentPingMs();
++            this->confirmSendText(QString("`[DEVIOS] Network Status: Nominal | Ping: %1 ms`").arg(rtt));
++            return;
++        }
++        else if (command == "purge") {
++            int count = args.size() > 1 ? args[1].toInt() : 10;
++            this->session().api().executeLocalPurge(this->peer(), count);
++            this->showServiceNotification(QString("[DEVIOS] Purged %1 messages locally.").arg(count));
++            return;
++        }
++        else if (command == "clog") {
++            // Dump local modified/deleted cache contents to file
++            QString logPath = QString("%1/devios_clog_%2.txt")
++                .arg(cconfiguredDir())
++                .arg(this->peer()->id.value);
++            this->session().data().dumpOpSecHistoryToFile(this->peer(), logPath);
++            this->showServiceNotification(QString("[DEVIOS] Local logs written to: %1").arg(logPath));
++            return;
++        }
++    }
++    
++    // Carry on with normal messaging pipelines
++    confirmSendText(text);
+ }

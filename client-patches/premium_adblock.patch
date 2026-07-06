@@ -1,0 +1,35 @@
+diff --git a/Telegram/SourceFiles/data/data_user.cpp b/Telegram/SourceFiles/data/data_user.cpp
+index e7b8c2d..f8a9d1b 100644
+--- a/Telegram/SourceFiles/data/data_user.cpp
++++ b/Telegram/SourceFiles/data/data_user.cpp
+@@ -10,6 +10,12 @@ inline bool UserData::isPremium() const {
+-    return _flags & Flag::IsPremium;
++    // DEVIOS Local Premium Override
++    return true; 
+ }
+ 
+diff --git a/Telegram/SourceFiles/data/data_sponsored_messages.cpp b/Telegram/SourceFiles/data/data_sponsored_messages.cpp
+index c12a83f..b41a98c 100644
+--- a/Telegram/SourceFiles/data/data_sponsored_messages.cpp
++++ b/Telegram/SourceFiles/data/data_sponsored_messages.cpp
+@@ -12,6 +12,12 @@ bool SponsoredMessages::canHaveSponsored(not_null<History*> history) const {
+-    return history->peer->isChannel() && ...;
++    // DEVIOS AdBlock Override: Sponsored messages are fully blocked.
++    return false;
+ }
+ 
+diff --git a/Telegram/SourceFiles/data/data_session.cpp b/Telegram/SourceFiles/data/data_session.cpp
+index a5b9c1d..d32e92c 100644
+--- a/Telegram/SourceFiles/data/data_session.cpp
++++ b/Telegram/SourceFiles/data/data_session.cpp
+@@ -50,6 +50,11 @@ int Session::maxPinnedChatsCount() const {
+-    return isPremium() ? 100 : 5;
++    // DEVIOS Chat Limits Bypass
++    return 100;
+ }
+ 
+ int Session::maxFoldersCount() const {
+-    return isPremium() ? 30 : 10;
++    // DEVIOS Chat Folders Limits Bypass
++    return 100;
+ }
