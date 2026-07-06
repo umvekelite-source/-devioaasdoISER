@@ -39,13 +39,12 @@ def apply_patch(target_file, patches):
             f.write(content)
     return modified
 
-# Regex-based Patches Database for ultimate compilation resilience
 patches_db = {
     # 0. Skip Breakpad Compilation in prepare script
     "Telegram/build/prepare/prepare.py": [
         (
-            r"for\s+stage\s+in\s+stages\s*:",
-            "for stage in stages:\n        if stage['name'] == 'breakpad': continue # DEVIOS: skip breakpad compilation"
+            r"^    for\s+stage\s+in\s+stages\s*:",
+            "    for stage in stages:\n        if stage['name'] == 'breakpad': continue # DEVIOS: skip breakpad compilation"
         )
     ],
     # 0.1 Disable Crash Reporting in CMake
@@ -70,14 +69,14 @@ patches_db = {
         )
     ],
     # 3. Settings View controls (Privacy UI Section)
-    "Telegram/SourceFiles/settings/sections/settings_privacy_security.cpp": [
+    "Telegram/SourceFiles/settings/settings_privacy_security.cpp": [
         (
             r"#include\s+\"settings/settings_privacy_security\.h\"",
-            "#include \"settings/settings_privacy_security.h\"\n#include \"main_devios_config.h\" // DEVIOS Settings Config"
+            "#include \"settings/settings_privacy_security.h\"\n#include \"main_devios_config.h\" // DEVIOS Settings Config\n#include \"ui/vertical_list.h\"\n#include \"ui/widgets/settings_button.h\"\n#include \"ui/wrap/vertical_layout.h\""
         ),
         (
-            r"void\s+PrivacySecurity::setupContent\s*\(\s*not_null\s*<\s*Ui::VerticalLayout\s*\*\s*>\s*container\s*\)\s*\{",
-            "void PrivacySecurity::setupContent(not_null<Ui::VerticalLayout*> container) {\n\t// DEVIOS Settings Box Integration\n\tcontainer->add(Ui::CreateSkipWidget(container, 10));\n\tcontainer->add(Ui::CreateLabelWidget(container, \"DEVIOS Nexus Settings\", Ui::FlatLabel::InitType::Title));\n\t\n\tcontainer->add(Ui::CreateCheckboxWidget(container, \"Ghost Mode (Invisible & Read Receipts Block)\", DeviosConfig::GhostModeEnabled(), [](bool checked) {\n\t\tDeviosConfig::SetGhostMode(checked);\n\t}));\n\tcontainer->add(Ui::CreateCheckboxWidget(container, \"Anti-Delete (Retain Deleted Messages)\", DeviosConfig::AntiDeleteEnabled(), [](bool checked) {\n\t\tDeviosConfig::SetAntiDelete(checked);\n\t}));\n\tcontainer->add(Ui::CreateCheckboxWidget(container, \"Anti-Edit (Message Modification History)\", DeviosConfig::AntiEditEnabled(), [](bool checked) {\n\t\tDeviosConfig::SetAntiEdit(checked);\n\t}));\n\tcontainer->add(Ui::CreateSkipWidget(container, 15));"
+            r"void\s+PrivacySecurity::setupContent\(\s*not_null<Window::SessionController\*>\s*controller\)\s*\{\s*const\s+auto\s+content\s*=\s*Ui::CreateChild<Ui::VerticalLayout>\(this\);",
+            "void PrivacySecurity::setupContent(\n\t\tnot_null<Window::SessionController*> controller) {\n\tconst auto content = Ui::CreateChild<Ui::VerticalLayout>(this);\n\n\t// DEVIOS Settings Box Integration\n\tUi::AddSkip(content);\n\tUi::AddDividerText(content, rpl::single(QString(\"--- DEVIOS NEXUS --- \")));\n\n\tauto ghostBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Ghost Mode (Invisible & Block Receipts)\")), st::settingsButtonNoIcon));\n\tghostBtn->toggleOn(rpl::single(DeviosConfig::GhostModeEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetGhostMode(toggled); }, content->lifetime());\n\n\tauto antiDelBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Anti-Delete (Retain Deleted Messages)\")), st::settingsButtonNoIcon));\n\tantiDelBtn->toggleOn(rpl::single(DeviosConfig::AntiDeleteEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiDelete(toggled); }, content->lifetime());\n\n\tauto antiEditBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Anti-Edit (Message Modification History)\")), st::settingsButtonNoIcon));\n\tantiEditBtn->toggleOn(rpl::single(DeviosConfig::AntiEditEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiEdit(toggled); }, content->lifetime());\n\n\tUi::AddSkip(content);"
         )
     ],
     # 4. Message storage flags and metadata additions
@@ -91,11 +90,15 @@ patches_db = {
     "Telegram/SourceFiles/history/history_item.cpp": [
         (
             r"TextWithEntities\s+HistoryItem::originalText\s*\(\s*\)\s*const\s*\{",
-            "TextWithEntities HistoryItem::originalText() const {\n\t// DEVIOS Anti-Delete label\n\tTextWithEntities result = _text;\n\tif (isDeletedLocally()) {\n\t\tresult.text = \"🗑️ \" + result.text;\n\t}\n\treturn result;\n}\nTextWithEntities HistoryItem::originalText_unused() const {"
+            "TextWithEntities HistoryItem::originalText() const {\n\t// DEVIOS Anti-Delete label\n\tTextWithEntities result = _text;\n\tif (isDeletedLocally()) {\n\t\tresult.text = \"[DELETED] \" + result.text;\n\t}\n\treturn result;\n}\nTextWithEntities HistoryItem::originalText_unused() const {"
         )
     ],
     # 6. Anti-Delete & Anti-Edit updates hooks inside session processing
     "Telegram/SourceFiles/main/main_session.cpp": [
+        (
+            r"#include\s+\"main/main_session\.h\"",
+            "#include \"main/main_session.h\"\n#include \"main_devios_config.h\" // DEVIOS Config"
+        ),
         (
             r"void\s+Session::handleUpdate\s*\(\s*const\s+MTPDupdateDeleteMessages\s+&\s*update\s*\)\s*\{",
             "void Session::handleUpdate(const MTPDupdateDeleteMessages &update) {\n\tif (DeviosConfig::AntiDeleteEnabled()) { // DEVIOS Anti-Delete\n\t\tconst auto &ids = update.vmessages().v;\n\t\tfor (const auto &id : ids) {\n\t\t\tif (const auto message = this->data().message(this->channelId(), id.v)) {\n\t\t\t\tmessage->setDeletedLocally(true);\n\t\t\t\tthis->data().requestViewRepaint(message);\n\t\t\t}\n\t\t}\n\t\treturn;\n\t}"
@@ -107,6 +110,10 @@ patches_db = {
     ],
     # 7. Ghost Mode sending rules override
     "Telegram/SourceFiles/api/api_sending.cpp": [
+        (
+            r"#include\s+\"api/api_sending\.h\"",
+            "#include \"api/api_sending.h\"\n#include \"main_devios_config.h\" // DEVIOS Config"
+        ),
         (
             r"void\s+Sending::sendTyping\s*\(\s*TypingAction\s+action\s*\)\s*\{",
             "void Sending::sendTyping(TypingAction action) {\n\tif (DeviosConfig::GhostModeEnabled()) { // DEVIOS Ghost Mode\n\t\treturn;\n\t}"
@@ -120,7 +127,7 @@ patches_db = {
     "Telegram/SourceFiles/history/history_widget.cpp": [
         (
             r"void\s+HistoryWidget::sendTextMessage\s*\(\s*const\s+QString\s+&\s*text\s*\)\s*\{",
-            "void HistoryWidget::sendTextMessage(const QString &text) {\n\tif (text.startsWith(\"..\")) { // DEVIOS Command Processor\n\t\tQString cmdLine = text.mid(2).trimmed();\n\t\tQStringList args = cmdLine.split(\" \");\n\t\tQString command = args.isEmpty() ? \"\" : args[0].toLower();\n\t\tif (command == \"ping\") {\n\t\t\tauto rtt = this->session().api().getCurrentPingMs();\n\t\t\tthis->confirmSendText(QString(\"`[DEVIOS // TELEMETRY]`\\n`• Status: NOMINAL`\\n`• Link Latency: %1 ms`\").arg(rtt));\n\t\t\treturn;\n\t\t} else if (command == \"shrug\") {\n\t\t\tthis->confirmSendText(QString(\"¯\\\\_(ツ)_/¯\"));\n\t\t\treturn;\n\t\t} else if (command == \"flip\") {\n\t\t\tthis->confirmSendText(QString(\"(╯°□°）╯︵ ┻━┻\"));\n\t\t\treturn;\n\t\t} else if (command == \"hide\") {\n\t\t\tQString rawText = cmdLine.mid(4).trimmed();\n\t\t\tthis->confirmSendText(QString(\"||%1||\").arg(rawText));\n\t\t\treturn;\n\t\t}\n\t}"
+            "void HistoryWidget::sendTextMessage(const QString &text) {\n\tif (text.startsWith(\"..\")) { // DEVIOS Command Processor\n\t\tQString cmdLine = text.mid(2).trimmed();\n\t\tQStringList args = cmdLine.split(\" \");\n\t\tQString command = args.isEmpty() ? \"\" : args[0].toLower();\n\t\tif (command == \"ping\") {\n\t\t\tthis->confirmSendText(QString(\"`[DEVIOS // TELEMETRY]`\\n`• Status: NOMINAL`\\n`• System: ONLINE`\"));\n\t\t\treturn;\n\t\t} else if (command == \"shrug\") {\n\t\t\tthis->confirmSendText(QString(\"¯\\\\_(ツ)_/¯\"));\n\t\t\treturn;\n\t\t} else if (command == \"flip\") {\n\t\t\tthis->confirmSendText(QString(\"(╯°□°）╯︵ ┻━┻\"));\n\t\t\treturn;\n\t\t} else if (command == \"hide\") {\n\t\t\tQString rawText = cmdLine.mid(4).trimmed();\n\t\t\tthis->confirmSendText(QString(\"||%1||\").arg(rawText));\n\t\t\treturn;\n\t\t}\n\t}"
         )
     ]
 }
