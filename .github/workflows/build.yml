@@ -60,12 +60,12 @@ jobs:
 
       - name: Fetch and Compile Dependencies
         run: |
-          python %TBUILD%/tdesktop/%PREPARE_PATH% -arch x64 -qt6
+          python %TBUILD%/tdesktop/%PREPARE_PATH% qt6
 
       - name: Configure CMake Build
         run: |
           cd %TBUILD%/tdesktop
-          call configure.bat -arch x64 -qt6
+          call configure.bat x64 qt6
 
       - name: Build Executable
         run: |
