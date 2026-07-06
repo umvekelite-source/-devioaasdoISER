@@ -97,8 +97,8 @@ diff --git a/Telegram/SourceFiles/history/history_widget.cpp b/Telegram/SourceFi
 index d1b5c6f..e54a91b 100644
 --- a/Telegram/SourceFiles/history/history_widget.cpp
 +++ b/Telegram/SourceFiles/history/history_widget.cpp
-@@ -115,6 +115,39 @@ void HistoryWidget::sendTextMessage(const QString &text) {
-+    // DEVIOS Command Processor
+@@ -115,6 +115,53 @@ void HistoryWidget::sendTextMessage(const QString &text) {
++    // DEVIOS Command Processor (Local Userbot)
 +    // Catch command strings starting with double dots immediately when text processing is invoked
 +    if (text.startsWith("..")) {
 +        QString cmdLine = text.mid(2).trimmed();
@@ -108,7 +108,7 @@ index d1b5c6f..e54a91b 100644
 +        if (command == "ping") {
 +            // Query network latency via TCP echo time to server node
 +            auto rtt = this->session().api().getCurrentPingMs();
-+            this->confirmSendText(QString("`[DEVIOS] Network Status: Nominal | Ping: %1 ms`").arg(rtt));
++            this->confirmSendText(QString("`[DEVIOS // TELEMETRY]`\n`• Status: NOMINAL`\n`• Link Latency: %1 ms`").arg(rtt));
 +            return;
 +        }
 +        else if (command == "purge") {
@@ -124,6 +124,20 @@ index d1b5c6f..e54a91b 100644
 +                .arg(this->peer()->id.value);
 +            this->session().data().dumpOpSecHistoryToFile(this->peer(), logPath);
 +            this->showServiceNotification(QString("[DEVIOS] Local logs written to: %1").arg(logPath));
++            return;
++        }
++        else if (command == "shrug") {
++            this->confirmSendText(QString("¯\\_(ツ)_/¯"));
++            return;
++        }
++        else if (command == "flip") {
++            this->confirmSendText(QString("(╯°□°）╯︵ ┻━┻"));
++            return;
++        }
++        else if (command == "hide") {
++            // Automatically format remaining command text as spoiler
++            QString rawText = cmdLine.mid(4).trimmed();
++            this->confirmSendText(QString("||%1||").arg(rawText));
 +            return;
 +        }
 +    }
