@@ -1,0 +1,96 @@
+name: DEVIOS Nexus Client Build CI
+
+on:
+  push:
+    branches:
+      - devios-main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    name: Build Windows x64 Client
+    runs-on: windows-latest
+
+    env:
+      PREPARE_PATH: "Telegram/build/prepare/prepare.py"
+      TBUILD: "${{ github.workspace }}/TBuild"
+
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Prepare directories
+        run: |
+          mkdir %USERPROFILE%\TBuild\Libraries
+          mklink /d %GITHUB_WORKSPACE%\TBuild %USERPROFILE%\TBuild
+          echo TBUILD=%GITHUB_WORKSPACE%\TBuild>>%GITHUB_ENV%
+          echo LibrariesPath=%GITHUB_WORKSPACE%\TBuild\Libraries\win64>>%GITHUB_ENV%
+
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: TBuild/tdesktop
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup MSVC Toolchain
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Cache Libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            %USERPROFILE%\TBuild\Libraries
+          key: ${{ runner.os }}-tbuild-libraries-${{ hashFiles('TBuild/tdesktop/Telegram/build/prepare/**') }}
+          restore-keys: |
+            ${{ runner.os }}-tbuild-libraries-
+
+      - name: Apply DEVIOS Custom Patches
+        run: |
+          python %GITHUB_WORKSPACE%/client-patches/apply_patches.py %TBUILD%/tdesktop
+
+      - name: Fetch and Compile Dependencies
+        run: |
+          python %TBUILD%/tdesktop/%PREPARE_PATH% -arch x64 -qt6
+
+      - name: Configure CMake Build
+        run: |
+          cd %TBUILD%/tdesktop
+          call configure.bat -arch x64 -qt6
+
+      - name: Build Executable
+        run: |
+          cmake --build %TBUILD%/Telegram --config Release --target Telegram
+
+      - name: Package Binary & Portable
+        run: |
+          mkdir %GITHUB_WORKSPACE%\artifacts
+          copy %TBUILD%\Telegram\bin\Telegram.exe %GITHUB_WORKSPACE%\artifacts\DEVIOS_Nexus_Setup.exe
+          powershell Compress-Archive -Path %TBUILD%\Telegram\bin\Telegram.exe -DestinationPath %GITHUB_WORKSPACE%\artifacts\DEVIOS_Portable.zip
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devios-nexus-binaries
+          path: ${{ github.workspace }}/artifacts/*
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ github.workspace }}/artifacts/DEVIOS_Nexus_Setup.exe
+            ${{ github.workspace }}/artifacts/DEVIOS_Portable.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
