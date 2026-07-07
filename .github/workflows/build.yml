@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - devios-main
+      - dev
     tags:
       - 'v*'
   workflow_dispatch:
@@ -12,16 +13,49 @@ jobs:
   build-windows:
     name: Build Windows x64 Client
     runs-on: windows-latest
+    timeout-minutes: 360
 
     env:
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
       TBUILD: "${{ github.workspace }}/TBuild"
+      PYTHONUTF8: "1"
 
     defaults:
       run:
         shell: cmd
 
     steps:
+      # Free up disk space — Qt + deps need ~30GB
+      - name: Free Disk Space
+        shell: powershell
+        run: |
+          Write-Host "=== Disk space BEFORE cleanup ==="
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='Free(GB)';E={[math]::Round($_.Free/1GB,2)}}
+          
+          # Remove unnecessary pre-installed software to free space
+          $paths = @(
+            "C:\Program Files\dotnet",
+            "C:\Program Files\Google\Chrome",
+            "C:\Program Files\Mozilla Firefox",
+            "C:\Program Files (x86)\Microsoft SDKs\Azure",
+            "C:\Program Files (x86)\Google",
+            "C:\hostedtoolcache\CodeQL",
+            "C:\hostedtoolcache\go",
+            "C:\hostedtoolcache\node",
+            "C:\hostedtoolcache\PyPy",
+            "C:\hostedtoolcache\Ruby",
+            "C:\imagegeneration"
+          )
+          foreach ($p in $paths) {
+            if (Test-Path $p) {
+              Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
+              Write-Host "Removed: $p"
+            }
+          }
+          
+          Write-Host "=== Disk space AFTER cleanup ==="
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='Free(GB)';E={[math]::Round($_.Free/1GB,2)}}
+
       - name: Prepare directories
         run: |
           mkdir %USERPROFILE%\TBuild\Libraries
@@ -49,14 +83,32 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            %USERPROFILE%\TBuild\Libraries
-          key: ${{ runner.os }}-tbuild-libraries-${{ hashFiles('TBuild/tdesktop/Telegram/build/prepare/**') }}
+            ${{ github.workspace }}\TBuild\Libraries
+          key: ${{ runner.os }}-tbuild-libraries-v2-${{ hashFiles('TBuild/tdesktop/Telegram/build/prepare/**') }}
           restore-keys: |
-            ${{ runner.os }}-tbuild-libraries-
+            ${{ runner.os }}-tbuild-libraries-v2-
 
       - name: Apply DEVIOS Custom Patches
         run: |
           python %TBUILD%/tdesktop/client-patches/apply_patches.py %TBUILD%/tdesktop
+
+      - name: Verify Patches Applied
+        shell: powershell
+        run: |
+          $files = @(
+            "$env:TBUILD/tdesktop/Telegram/SourceFiles/main_devios_config.h",
+            "$env:TBUILD/tdesktop/Telegram/SourceFiles/apiwrap.cpp"
+          )
+          foreach ($f in $files) {
+            if (!(Test-Path $f)) { Write-Error "Missing: $f"; exit 1 }
+            if (!(Select-String -Path $f -Pattern "DEVIOS" -Quiet)) { Write-Error "No DEVIOS marker in: $f"; exit 1 }
+          }
+          Write-Host "[OK] All patches verified."
+
+      - name: Check Disk Before Dependencies
+        shell: powershell
+        run: |
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name,@{N='Free(GB)';E={[math]::Round($_.Free/1GB,2)}}
 
       - name: Fetch and Compile Dependencies
         run: |
@@ -74,23 +126,25 @@ jobs:
       - name: Package Binary & Portable
         run: |
           mkdir %GITHUB_WORKSPACE%\artifacts
-          copy %TBUILD%\Telegram\bin\Telegram.exe %GITHUB_WORKSPACE%\artifacts\DEVIOS_Nexus_Setup.exe
-          powershell Compress-Archive -Path %TBUILD%\Telegram\bin\Telegram.exe -DestinationPath %GITHUB_WORKSPACE%\artifacts\DEVIOS_Portable.zip
+          copy %TBUILD%\Telegram\bin\Telegram.exe %GITHUB_WORKSPACE%\artifacts\DEVIOS_Nexus.exe
+          powershell Compress-Archive -Path %TBUILD%\Telegram\bin\Telegram.exe -DestinationPath %GITHUB_WORKSPACE%\artifacts\DEVIOS_Nexus_Portable.zip
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: devios-nexus-binaries
           path: ${{ github.workspace }}/artifacts/*
+          retention-days: 30
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ github.workspace }}/artifacts/DEVIOS_Nexus_Setup.exe
-            ${{ github.workspace }}/artifacts/DEVIOS_Portable.zip
+            ${{ github.workspace }}/artifacts/DEVIOS_Nexus.exe
+            ${{ github.workspace }}/artifacts/DEVIOS_Nexus_Portable.zip
           draft: false
           prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
