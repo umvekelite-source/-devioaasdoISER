@@ -54,7 +54,7 @@ patches_db = {
     "Telegram/build/prepare/prepare.py": [
         (
             r"^(    for stage in stages:\n)(        if len\(onlyStages\))",
-            r"\1        if stage['name'] == 'breakpad': continue # DEVIOS: skip breakpad compilation\n\2",
+            "\\1        if stage['name'] == 'breakpad': continue # DEVIOS: skip breakpad compilation\n\\2",
             re.MULTILINE
         )
     ],
@@ -64,7 +64,7 @@ patches_db = {
     "Telegram/CMakeLists.txt": [
         (
             r"^(add_executable\(Telegram WIN32 MACOSX_BUNDLE\))",
-            r"set(DESKTOP_APP_DISABLE_CRASH_REPORTS ON CACHE BOOL \"\" FORCE) # DEVIOS: disable crash reporting\n\1",
+            "set(DESKTOP_APP_DISABLE_CRASH_REPORTS ON CACHE BOOL \"\" FORCE) # DEVIOS: disable crash reporting\n\\1",
             re.MULTILINE
         )
     ],
@@ -77,7 +77,7 @@ patches_db = {
     "Telegram/SourceFiles/data/data_user.cpp": [
         (
             r"(bool UserData::isPremium\(\) const \{)\s*\n\s*return flags\(\) & UserDataFlag::Premium;\s*\n(\})",
-            r"\1\n\treturn true; // DEVIOS: Local Premium bypass\n\2",
+            "\\1\n\treturn true; // DEVIOS: Local Premium bypass\n\\2",
             re.MULTILINE
         )
     ],
@@ -88,7 +88,7 @@ patches_db = {
     "Telegram/SourceFiles/data/components/sponsored_messages.cpp": [
         (
             r"(bool SponsoredMessages::canHaveFor\(not_null<History\*> history\) const \{)",
-            r"\1\n\treturn false; // DEVIOS AdBlock: block all sponsored messages",
+            "\\1\n\treturn false; // DEVIOS AdBlock: block all sponsored messages",
             re.MULTILINE
         )
     ],
@@ -103,12 +103,12 @@ patches_db = {
     "Telegram/SourceFiles/api/api_send_progress.cpp": [
         (
             r'(#include "api/api_send_progress\.h")',
-            r'\1\n#include "main_devios_config.h" // DEVIOS Config',
+            "\\1\n#include \"main_devios_config.h\" // DEVIOS Config",
             0
         ),
         (
             r"(void SendProgressManager::update\(\s*\n\s*not_null<History\*> history,\s*\n\s*MsgId topMsgId,\s*\n\s*SendProgressType type,\s*\n\s*int progress\) \{)",
-            r"\1\n\tif (DeviosConfig::GhostModeEnabled()) return; // DEVIOS Ghost Mode: block typing",
+            "\\1\n\tif (DeviosConfig::GhostModeEnabled()) return; // DEVIOS Ghost Mode: block typing",
             re.MULTILINE
         )
     ],
@@ -119,12 +119,12 @@ patches_db = {
     "Telegram/SourceFiles/data/data_histories.cpp": [
         (
             r'(#include "data/data_histories\.h")',
-            r'\1\n#include "main_devios_config.h" // DEVIOS Config',
+            "\\1\n#include \"main_devios_config.h\" // DEVIOS Config",
             0
         ),
         (
             r"(void Histories::sendReadRequests\(\) \{)",
-            r"\1\n\tif (DeviosConfig::GhostModeEnabled()) return; // DEVIOS Ghost Mode: block read receipts",
+            "\\1\n\tif (DeviosConfig::GhostModeEnabled()) return; // DEVIOS Ghost Mode: block read receipts",
             re.MULTILINE
         )
     ],
@@ -139,12 +139,12 @@ patches_db = {
     "Telegram/SourceFiles/api/api_updates.cpp": [
         (
             r'(#include "api/api_updates\.h")',
-            r'\1\n#include "main_devios_config.h" // DEVIOS Config',
+            "\\1\n#include \"main_devios_config.h\" // DEVIOS Config",
             0
         ),
         (
             r"(_session->data\(\)\.processNonChannelMessagesDeleted\(d\.vmessages\(\)\.v\);)",
-            r"if (!DeviosConfig::AntiDeleteEnabled()) { \1 } // DEVIOS Anti-Delete",
+            "if (!DeviosConfig::AntiDeleteEnabled()) { \\1 } // DEVIOS Anti-Delete",
             0
         )
     ],
@@ -158,28 +158,23 @@ patches_db = {
     "Telegram/SourceFiles/settings/settings_privacy_security.cpp": [
         (
             r'(#include "settings/settings_privacy_security\.h")',
-            r'\1\n#include "main_devios_config.h" // DEVIOS Settings Config',
+            "\\1\n#include \"main_devios_config.h\" // DEVIOS Settings Config",
             0
         ),
         (
             r"(const auto content = Ui::CreateChild<Ui::VerticalLayout>\(this\);)",
-            r"""\1
-
-	// ═══════════════════════ DEVIOS NEXUS SETTINGS ═══════════════════════
-	Ui::AddSkip(content);
-	Ui::AddDividerText(content, rpl::single(QString("DEVIOS NEXUS")));
-
-	const auto ghostBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString("Ghost Mode")), st::settingsButtonNoIcon));
-	ghostBtn->toggleOn(rpl::single(DeviosConfig::GhostModeEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetGhostMode(toggled); }, content->lifetime());
-
-	const auto antiDelBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString("Anti-Delete")), st::settingsButtonNoIcon));
-	antiDelBtn->toggleOn(rpl::single(DeviosConfig::AntiDeleteEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiDelete(toggled); }, content->lifetime());
-
-	const auto antiEditBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString("Anti-Edit")), st::settingsButtonNoIcon));
-	antiEditBtn->toggleOn(rpl::single(DeviosConfig::AntiEditEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiEdit(toggled); }, content->lifetime());
-
-	Ui::AddSkip(content);
-	// ═══════════════════════════════════════════════════════════════════""",
+            "\\1\n\n"
+            "\t// ═══════════════════════ DEVIOS NEXUS SETTINGS ═══════════════════════\n"
+            "\tUi::AddSkip(content);\n"
+            "\tUi::AddDividerText(content, rpl::single(QString(\"DEVIOS NEXUS\")));\n\n"
+            "\tconst auto ghostBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Ghost Mode\")), st::settingsButtonNoIcon));\n"
+            "\tghostBtn->toggleOn(rpl::single(DeviosConfig::GhostModeEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetGhostMode(toggled); }, content->lifetime());\n\n"
+            "\tconst auto antiDelBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Anti-Delete\")), st::settingsButtonNoIcon));\n"
+            "\tantiDelBtn->toggleOn(rpl::single(DeviosConfig::AntiDeleteEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiDelete(toggled); }, content->lifetime());\n\n"
+            "\tconst auto antiEditBtn = content->add(object_ptr<Ui::SettingsButton>(content, rpl::single(QString(\"Anti-Edit\")), st::settingsButtonNoIcon));\n"
+            "\tantiEditBtn->toggleOn(rpl::single(DeviosConfig::AntiEditEnabled()))->toggledChanges() | rpl::start_with_next([=](bool toggled) { DeviosConfig::SetAntiEdit(toggled); }, content->lifetime());\n\n"
+            "\tUi::AddSkip(content);\n"
+            "\t// ═══════════════════════════════════════════════════════════════════",
             0
         )
     ],
@@ -191,7 +186,7 @@ patches_db = {
     "Telegram/SourceFiles/apiwrap.cpp": [
         (
             r'(#include "apiwrap\.h")',
-            r'\1\n#include "main_devios_config.h" // DEVIOS Config',
+            "\\1\n#include \"main_devios_config.h\" // DEVIOS Config",
             0
         ),
         (
