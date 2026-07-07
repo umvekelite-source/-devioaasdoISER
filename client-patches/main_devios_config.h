@@ -1,13 +1,24 @@
 #pragma once
-// DEVIOS Nexus Client - Runtime Configuration
-// This header provides static toggles for Ghost Mode, Anti-Delete, and Anti-Edit.
-// Settings persist across the session but reset on app restart.
+// ============================================================================
+// DEVIOS Nexus Client v5.0 — Runtime Configuration
+// ============================================================================
+// This header provides the central configuration singleton for all DEVIOS
+// features. Settings persist between app restarts via QSettings (Windows
+// Registry: HKCU\Software\DEVIOS\NexusClient).
+//
 // Included automatically by the DEVIOS Nexus Patcher into relevant source files.
+// ============================================================================
 
 #include <QSettings>
+#include <QString>
+#include <QDateTime>
 
 class DeviosConfig {
 public:
+    // --- Version info ---
+    static const char* Version() { return "5.0.0-alpha"; }
+    static const char* ClientName() { return "DEVIOS Nexus"; }
+
     // --- Ghost Mode: blocks typing indicators and read receipts ---
     static bool GhostModeEnabled() {
         return instance()._ghostMode;
@@ -35,16 +46,23 @@ public:
         instance().save();
     }
 
+    // --- Userbot command prefix (default "..") ---
+    static QString CommandPrefix() {
+        return instance()._commandPrefix;
+    }
+
 private:
     bool _ghostMode = true;
     bool _antiDelete = true;
     bool _antiEdit = true;
+    QString _commandPrefix = "..";
 
     DeviosConfig() {
         QSettings s("DEVIOS", "NexusClient");
-        _ghostMode  = s.value("ghost_mode", true).toBool();
-        _antiDelete = s.value("anti_delete", true).toBool();
-        _antiEdit   = s.value("anti_edit", true).toBool();
+        _ghostMode     = s.value("ghost_mode", true).toBool();
+        _antiDelete    = s.value("anti_delete", true).toBool();
+        _antiEdit      = s.value("anti_edit", true).toBool();
+        _commandPrefix = s.value("command_prefix", "..").toString();
     }
 
     void save() {
@@ -52,6 +70,7 @@ private:
         s.setValue("ghost_mode", _ghostMode);
         s.setValue("anti_delete", _antiDelete);
         s.setValue("anti_edit", _antiEdit);
+        s.setValue("command_prefix", _commandPrefix);
     }
 
     static DeviosConfig& instance() {
